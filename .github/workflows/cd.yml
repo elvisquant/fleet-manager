@@ -1,0 +1,224 @@
+name: CD Pipeline
+
+on:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types:
+      - completed
+    branches: [main]
+
+concurrency:
+  group: production-deployment-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  pre-deployment-check:
+    name: Pre-deployment Checks
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Verify environment readiness
+      run: |
+        echo "Running pre-deployment checks..."
+        echo "Workflow: ${{ github.event.workflow_run.name }}"
+        echo "Status: ${{ github.event.workflow_run.conclusion }}"
+        echo "Commit: ${{ github.event.workflow_run.head_sha }}"
+
+    - name: Create deployment status
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const deployment = await github.rest.repos.createDeployment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            ref: '${{ github.event.workflow_run.head_sha }}',
+            required_contexts: [],
+            environment: 'production',
+            transient_environment: false,
+            production_environment: true,
+            description: 'Production deployment initiated'
+          });
+          
+          await github.rest.repos.createDeploymentStatus({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            deployment_id: deployment.data.id,
+            state: 'in_progress',
+            environment: 'production',
+            description: 'Deployment in progress'
+          });
+          
+          return deployment.data.id;
+
+  deploy:
+    name: 🚀 Deploy to Production
+    runs-on: ubuntu-latest
+    needs: pre-deployment-check
+    environment: 
+      name: production
+      url: https://api.elvisquant.com
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure SSH
+      uses: webfactory/ssh-agent@v0.8.0
+      with:
+        ssh-private-key: ${{ secrets.AWS_SSH_KEY }}
+
+    - name: Deploy to AWS EC2
+      uses: appleboy/ssh-action@v0.1.10
+      with:
+        host: ${{ secrets.AWS_HOST }}
+        username: ${{ secrets.AWS_USERNAME }}
+        key: ${{ secrets.AWS_SSH_KEY }}
+        script: |
+          set -euo pipefail
+          
+          # Export environment variables
+          export DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
+          export DOCKERHUB_TOKEN="${{ secrets.DOCKERHUB_TOKEN }}"
+          export DATABASE_PASSWORD="${{ secrets.DATABASE_PASSWORD }}"
+          export DATABASE_NAME="${{ secrets.DATABASE_NAME }}"
+          export DATABASE_USERNAME="${{ secrets.DATABASE_USERNAME }}"
+          export SECRET_KEY="${{ secrets.SECRET_KEY }}"
+          export ALGORITHM="${{ secrets.ALGORITHM }}"
+          export ACCESS_TOKEN_EXPIRE_MINUTES="${{ secrets.ACCESS_TOKEN_EXPIRE_MINUTES }}"
+          export GRAFANA_PASSWORD="${{ secrets.GRAFANA_PASSWORD }}"
+          
+          echo "🚀 Starting deployment process..."
+          cd /opt/fastapi-production
+          
+          # Pull latest changes from repository
+          git fetch origin main
+          git reset --hard origin/main
+          
+          # Make scripts executable
+          chmod +x scripts/*.sh
+          
+          # Run deployment script
+          ./scripts/deploy.sh
+          
+          # Run health check
+          echo "🏥 Running health check..."
+          ./scripts/healthcheck.sh
+          
+          echo "✅ Deployment completed successfully!"
+
+    - name: Update deployment status
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const { data: deployments } = await github.rest.repos.listDeployments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            ref: '${{ github.event.workflow_run.head_sha }}'
+          });
+          
+          if (deployments.length > 0) {
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: deployments[0].id,
+              state: 'success',
+              environment: 'production',
+              environment_url: 'https://api.elvisquant.com',
+              description: 'Deployment to production completed successfully'
+            });
+          }
+
+  post-deployment:
+    name: Post-deployment Verification
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: always()
+
+    steps:
+    - name: Run smoke tests
+      run: |
+        echo "Running post-deployment smoke tests..."
+        # Add your smoke test commands here
+        curl -f https://api.elvisquant.com/health || exit 1
+        curl -f https://api.elvisquant.com/api/status || exit 1
+        echo "✅ Smoke tests passed!"
+
+    - name: Notify success
+      if: success()
+      uses: actions/github-script@v6
+      with:
+        script: |
+          await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: '✅ Deployment Successful - ${{ github.sha }}',
+            body: `Production deployment completed successfully!\n\n- Commit: ${{ github.sha }}\n- Environment: production\n- API URL: https://api.elvisquant.com\n- App URL: https://app.elvisquant.com`
+          });
+
+  rollback:
+    name: 🔄 Rollback on Failure
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: ${{ failure() && needs.deploy.result == 'failure' }}
+
+    steps:
+    - name: Configure SSH
+      uses: webfactory/ssh-agent@v0.8.0
+      with:
+        ssh-private-key: ${{ secrets.AWS_SSH_KEY }}
+
+    - name: Execute rollback
+      uses: appleboy/ssh-action@v0.1.10
+      with:
+        host: ${{ secrets.AWS_HOST }}
+        username: ${{ secrets.AWS_USERNAME }}
+        key: ${{ secrets.AWS_SSH_KEY }}
+        script: |
+          set -euo pipefail
+          echo "🔄 Initiating rollback procedure..."
+          cd /opt/fastapi-production
+          
+          # Rollback to previous working version
+          docker-compose -f docker-compose.prod.yml up -d --force-recreate
+          
+          # Verify rollback
+          sleep 10
+          curl -f http://localhost:8000/health || echo "⚠️ Health check failed after rollback"
+          
+          echo "✅ Rollback completed successfully!"
+
+    - name: Update deployment status
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const { data: deployments } = await github.rest.repos.listDeployments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            ref: '${{ github.event.workflow_run.head_sha }}'
+          });
+          
+          if (deployments.length > 0) {
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: deployments[0].id,
+              state: 'failure',
+              environment: 'production',
+              description: 'Deployment failed - rollback initiated'
+            });
+          }
+
+    - name: Notify failure
+      uses: actions/github-script@v6
+      with:
+        script: |
+          await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: '🚨 Deployment Failed - Rollback Initiated',
+            body: `Deployment failed for commit ${{ github.sha }}. Rollback to previous version completed.\n\nError: ${{ needs.deploy.result }}`
+          });

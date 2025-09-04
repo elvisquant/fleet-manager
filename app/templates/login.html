@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Login - FleetDash</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            color-scheme: dark;
+        }
+        
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 16px;
+            background: #0f172a;
+            background-image: 
+                radial-gradient(at 80% 0%, hsla(189, 100%, 56%, 0.15) 0px, transparent 50%),
+                radial-gradient(at 0% 50%, hsla(355, 100%, 93%, 0.1) 0px, transparent 50%);
+        }
+
+        @media (max-height: 600px) {
+            body {
+                align-items: flex-start;
+                padding-top: 32px;
+            }
+        }
+
+        .login-card {
+            width: 100%;
+            max-width: 400px;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 
+                        0 8px 10px -6px rgba(0, 0, 0, 0.3);
+        }
+
+        @media (max-width: 480px) {
+            .login-card {
+                padding: 24px;
+                border-radius: 12px;
+            }
+        }
+
+        .input-field {
+            width: 100%;
+            padding: 12px 16px 12px 44px;
+            background: rgba(30, 41, 59, 0.7);
+            border: 1px solid rgba(71, 85, 105, 0.5);
+            border-radius: 8px;
+            color: white;
+            font-size: 15px;
+            transition: all 0.2s ease;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+        }
+
+        .btn-primary {
+            width: 100%;
+            padding: 14px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 15px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+            transform: translateY(-1px);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        .error-message {
+            padding: 12px;
+            background: rgba(127, 29, 29, 0.5);
+            border: 1px solid rgba(185, 28, 28, 0.5);
+            border-radius: 8px;
+            color: #fca5a5;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .icon-input {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #64748b;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <div class="text-center mb-8">
+            <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-blue-900/20 flex items-center justify-center">
+                <i data-lucide="log-in" class="w-8 h-8 text-blue-400"></i>
+            </div>
+            <h1 class="text-2xl font-bold text-white mb-2">Welcome Back</h1>
+            <p class="text-slate-400">Sign in to access your account</p>
+        </div>
+
+        <form id="loginForm" class="space-y-5">
+            <div class="space-y-3">
+                <label for="username" class="block text-sm font-medium text-slate-300">Username or Email</label>
+                <div class="relative">
+                    <div class="icon-input">
+                        <i data-lucide="user" class="w-5 h-5"></i>
+                    </div>
+                    <input type="text" id="username" name="username" required
+                           class="input-field"
+                           placeholder="Enter your username or email">
+                </div>
+            </div>
+            
+            <div class="space-y-3">
+                <label for="password" class="block text-sm font-medium text-slate-300">Password</label>
+                <div class="relative">
+                    <div class="icon-input">
+                        <i data-lucide="lock" class="w-5 h-5"></i>
+                    </div>
+                    <input type="password" id="password" name="password" required
+                           class="input-field"
+                           placeholder="Enter your password">
+                </div>
+            </div>
+            
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <input id="remember" name="remember" type="checkbox" 
+                           class="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-blue-500">
+                    <label for="remember" class="ml-2 text-sm text-slate-300">Remember me</label>
+                </div>
+                <a href="#" class="text-sm text-blue-400 hover:text-blue-300">Forgot password?</a>
+            </div>
+            
+            <div id="errorMessage" class="error-message hidden">
+                <i data-lucide="alert-circle" class="w-5 h-5"></i>
+                <span id="errorText"></span>
+            </div>
+            
+            <button type="submit" id="loginButton" class="btn-primary">
+                <span id="loginButtonText">Sign In</span>
+                <i id="loginSpinner" data-lucide="loader-2" class="w-5 h-5 animate-spin hidden"></i>
+            </button>
+        </form>
+        
+        <div class="mt-6">
+            <div class="relative">
+                <div class="absolute inset-0 flex items-center">
+                    <div class="w-full border-t border-slate-700"></div>
+                </div>
+                <div class="relative flex justify-center text-sm">
+                    <span class="px-2 bg-slate-900 text-slate-400">Or continue with</span>
+                </div>
+            </div>
+
+            <div class="mt-6 grid grid-cols-2 gap-3">
+                <button class="flex items-center justify-center py-2 px-4 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700">
+                    <i data-lucide="github" class="w-5 h-5"></i>
+                </button>
+                <button class="flex items-center justify-center py-2 px-4 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700">
+                    <i data-lucide="facebook" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+        
+        <p class="text-center text-sm text-slate-400 mt-6">
+            Don't have an account? <a href="#" class="font-medium text-blue-400 hover:text-blue-300">Sign up</a>
+        </p>
+    </div>
+
+    <script>
+        document.documentElement.setAttribute('data-theme', 'dark');
+        document.documentElement.style.colorScheme = 'dark';
+
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
+
+        const loginForm = document.getElementById('loginForm');
+        const errorMessage = document.getElementById('errorMessage');
+        const errorText = document.getElementById('errorText');
+        const loginButton = document.getElementById('loginButton');
+        const loginButtonText = document.getElementById('loginButtonText');
+        const loginSpinner = document.getElementById('loginSpinner');
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            errorMessage.classList.add('hidden');
+            loginButton.disabled = true;
+            loginButtonText.classList.add('hidden');
+            loginSpinner.classList.remove('hidden');
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+
+            try {
+                const formData = new FormData(loginForm);
+                // The name 'username' for the input field corresponds to 
+                // OAuth2PasswordRequestForm's 'username' parameter.
+                const response = await fetch('/login/', { // Path matches your auth.py router prefix
+                    method: 'POST',
+                    body: formData 
+                });
+
+                const data = await response.json(); 
+
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Login failed. Please check your credentials.');
+                }
+                
+                if (data.access_token) {
+                    localStorage.setItem('accessToken', data.access_token);
+                    
+                    // Store additional user details if returned by the API
+                    if (data.username) {
+                        localStorage.setItem('username', data.username);
+                    } else {
+                        console.warn("Username not found in login response data.");
+                        // Fallback or attempt to decode from token if absolutely necessary,
+                        // but server should ideally send it.
+                        // For now, we'll rely on server sending it.
+                    }
+                    if (data.user_id) {
+                        localStorage.setItem('user_id', data.user_id.toString()); 
+                    }
+                    if (data.status) {
+                        localStorage.setItem('user_status', data.status);
+                    }
+
+                    // Optionally show a success toast
+                    // showToast("Login successful! Redirecting...", 2000, "success"); 
+                    // If you have a showToast function available globally or defined here.
+
+                    window.location.href = '/dashboard'; // Redirect to dashboard
+                } else {
+                    throw new Error('Login successful, but no access token was received.');
+                }
+            } catch (err) {
+                errorText.textContent = err.message;
+                errorMessage.classList.remove('hidden');
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+            } finally {
+                loginButton.disabled = false;
+                loginButtonText.classList.remove('hidden');
+                loginSpinner.classList.add('hidden');
+            }
+        });
+
+        function handleViewport() {
+            const viewport = document.querySelector('meta[name="viewport"]');
+            if (window.innerWidth <= 480 || window.innerHeight <= 480) {
+                viewport.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0');
+            } else {
+                viewport.setAttribute('content', 'width=device-width, initial-scale=1.0');
+            }
+        }
+
+        window.addEventListener('resize', handleViewport);
+        handleViewport();
+    </script>
+</body>
+</html>
