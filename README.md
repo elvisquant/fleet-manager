@@ -1,21 +1,21 @@
-# FastAPI Authentication APIs - Test Driven Development (TDD)
+# FastAPI Fleet Management WEBAPP - Test Driven Development (TDD)
 
 ### Video Tutorial
 [Click here](#)
 
 ### APIs 
-![ALT TEXT](https://github.com/Describly/fastapi-tdd-user-authentication/blob/main/screenshot.png)
+![ALT TEXT](https://github.com/elvisquant/fleet-manager/screenshot.png)
 
 ### Installation & Configuration
 - Install the Docker Desktop and Start It
-- Clone this repository in your local machine by typing `git@github.com:Describly/fastapi-tdd-user-authentication.git`. 
+- Clone this repository in your local machine by typing `git@github.com:elvisquant/fleet-manager.git`. 
 - Open the Terminal and navigate to the project folder.
-- Run `docker volume create describly_mysql_data` to create a docker volue in you machine. Required to persist the mysql data.
+- Run `docker volume create elvispronda_mysql_data` to create a docker volue in you machine. Required to persist the mysql data.
 - Below will be your mysql connection details
 ```bash
 MYSQL_HOST=mysql
 MYSQL_USER=root
-MYSQL_PASSWORD=Describly&123
+MYSQL_PASSWORD=Umubo123
 MYSQL_DB=fastapi
 MYSQL_PORT=3306
 ```
@@ -61,4 +61,4 @@ docker-compose run fastapi-service /bin/sh -c "pytest --log-cli-level=INFO"
 docker-compose run fastapi-service /bin/sh -c "pytest tests/test_folder/test_file.py"
 ```
 
-# fastapi-tdd-user-authentication
+# fleet-manager
