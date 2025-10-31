@@ -54,5 +54,4 @@ services:
 networks:
   elvispronda:
 volumes:
-  elvispronda_mysql_data:
-    external: true
+  elvispronda_mysql_data: {} 
