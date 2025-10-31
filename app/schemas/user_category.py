@@ -1,27 +1,22 @@
 from typing import Optional
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
-# ===============================================
-#           User Category Schemas
-# ===============================================
-
-# Base schema with common attributes.
+# Base schema with common attributes
 class UserCategoryBase(BaseModel):
     name: str
 
-# Schema used for creating a new category via an API request.
+# Schema for creating a new category (receives data from a request)
 class UserCategoryCreate(UserCategoryBase):
     pass
 
-# Schema for updating a category. All fields are optional.
+# Schema for updating a category (all fields are optional)
 class UserCategoryUpdate(BaseModel):
     name: Optional[str] = None
 
-# Schema for returning a category in an API response.
+# Schema for reading/returning a category (includes the database ID)
 class UserCategoryResponse(UserCategoryBase):
     id: int
-    
-    # Use model_config in Pydantic v2 instead of class Config
-    model_config = ConfigDict(from_attributes=True)
 
-
+    class Config:
+        # This allows Pydantic to read data from ORM models
+        from_orm = True

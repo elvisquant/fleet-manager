@@ -1,16 +1,25 @@
+# FILE: app/services/user.py
+
 from datetime import datetime, timedelta
 import logging
 from sqlalchemy.orm import joinedload, Session
 from fastapi import HTTPException, BackgroundTasks
+from fastapi.security import OAuth2PasswordRequestForm
 
-# Import your models, including the new UserCategory model
+# --- CORRECTED IMPORTS ---
+# Import the specific Pydantic schemas that correspond to the data
+# expected by each function. This is the key to fixing the error.
+from app.schemas.user import RegisterUserRequest, VerifyUserRequest, EmailRequest, ResetRequest
+
+# Import your models
 from app.models.user import User, UserToken
 from app.models.user_category import UserCategory 
 
+# Import your project's helper functions and settings
 from app.config.security import (
     generate_token, get_token_payload, hash_password,
     is_password_strong_enough, load_user, str_decode,
-    str_encode, verify_password
+    verify_password
 )
 from app.services.email import (
     send_account_activation_confirmation_email,
@@ -22,8 +31,8 @@ from app.config.settings import get_settings
 
 settings = get_settings()
 
-async def create_user_account(data, session: Session, background_tasks: BackgroundTasks):
-    
+# --- CORRECTED SIGNATURE ---
+async def create_user_account(data: RegisterUserRequest, session: Session, background_tasks: BackgroundTasks):
     user_exist = session.query(User).filter(User.email == data.email).first()
     if user_exist:
         raise HTTPException(status_code=400, detail="Email is already exists.")
@@ -31,34 +40,27 @@ async def create_user_account(data, session: Session, background_tasks: Backgrou
     if not is_password_strong_enough(data.password):
         raise HTTPException(status_code=400, detail="Please provide a strong password.")
     
-    # --- CHANGE: Assign a default user category upon registration ---
-    # Find the default category from the database.
-    # This assumes you have pre-populated the 'user_categories' table with a "simple" category.
     default_category = session.query(UserCategory).filter(UserCategory.name == "simple").first()
     if not default_category:
-        # This is a server-side issue, so we raise a 500 error.
-        raise HTTPException(
-            status_code=500, 
-            detail="Default user category not configured. Please contact support."
-        )
+        raise HTTPException(status_code=500, detail="Default user category not configured. Please contact support.")
     
-    user = User()
-    user.name = data.name
-    user.email = data.email
-    user.password = hash_password(data.password)
-    user.is_active = False
-    user.user_category_id = default_category.id  # Assign the foreign key ID
-    user.updated_at = datetime.utcnow()
+    user = User(
+        name=data.name,
+        email=data.email,
+        password=hash_password(data.password),
+        is_active=False,
+        user_category_id=default_category.id,
+        updated_at=datetime.utcnow()
+    )
     session.add(user)
     session.commit()
     session.refresh(user)
     
-    # Account Verification Email
     await send_account_verification_email(user, background_tasks=background_tasks)
     return user
     
-    
-async def activate_user_account(data, session: Session, background_tasks: BackgroundTasks):
+# --- CORRECTED SIGNATURE ---
+async def activate_user_account(data: VerifyUserRequest, session: Session, background_tasks: BackgroundTasks):
     user = session.query(User).filter(User.email == data.email).first()
     if not user:
         raise HTTPException(status_code=400, detail="This link is not valid.")
@@ -78,15 +80,11 @@ async def activate_user_account(data, session: Session, background_tasks: Backgr
     session.add(user)
     session.commit()
     session.refresh(user)
-    # Activation confirmation email
     await send_account_activation_confirmation_email(user, background_tasks)
     return user
 
-
-async def get_login_token(data, session: Session):
-    # --- CHANGE: load_user should be optimized to fetch the category relationship ---
-    # The `load_user` function should ideally use joinedload to be efficient.
-    # Example: session.query(User).options(joinedload(User.category)).filter(User.email == email).first()
+# --- CORRECTED SIGNATURE ---
+async def get_login_token(data: OAuth2PasswordRequestForm, session: Session):
     user = await load_user(data.username, session)
     if not user:
         raise HTTPException(status_code=400, detail="Email is not registered with us.")
@@ -100,7 +98,6 @@ async def get_login_token(data, session: Session):
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Your account has been deactivated. Please contact support.")
         
-    # Generate the JWT Token, now including the user category
     return _generate_tokens(user, session)
 
 
@@ -109,18 +106,12 @@ async def get_refresh_token(refresh_token: str, session: Session):
     if not token_payload:
         raise HTTPException(status_code=400, detail="Invalid Request.")
     
-    refresh_key = token_payload.get('t')
-    access_key = token_payload.get('a')
-    user_id = str_decode(token_payload.get('sub'))
-
-    # --- CHANGE: Use joinedload for efficiency to get the user and their category ---
+    refresh_key, access_key, user_id = token_payload.get('t'), token_payload.get('a'), str_decode(token_payload.get('sub'))
     user_token = session.query(UserToken).options(
         joinedload(UserToken.user).joinedload(User.category)
     ).filter(
-        UserToken.refresh_key == refresh_key,
-        UserToken.access_key == access_key,
-        UserToken.user_id == user_id,
-        UserToken.expires_at > datetime.utcnow()
+        UserToken.refresh_key == refresh_key, UserToken.access_key == access_key,
+        UserToken.user_id == user_id, UserToken.expires_at > datetime.utcnow()
     ).first()
     
     if not user_token:
@@ -139,61 +130,43 @@ def _generate_tokens(user: User, session: Session):
     rt_expires = timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
 
     user_token = UserToken(
-        user_id=user.id,
-        refresh_key=refresh_key,
-        access_key=access_key,
-        expires_at=datetime.utcnow() + rt_expires
+        user_id=user.id, refresh_key=refresh_key,
+        access_key=access_key, expires_at=datetime.utcnow() + rt_expires
     )
     session.add(user_token)
     session.commit()
-    session.refresh(user_token)
 
-    # --- CHANGE: Add user category to the JWT payload ---
-    # Access the category name via the relationship: user.category.name
     at_payload = {
-        "sub": str_encode(str(user.id)),
-        'a': access_key,
-        'r': str_encode(str(user_token.id)),
-        'n': str_encode(f"{user.name}"),
-        'cat': user.category.name if user.category else None # Safely access the category name
+        "sub": str_encode(str(user.id)), 'a': access_key, 'r': str_encode(str(user_token.id)),
+        'n': str_encode(f"{user.name}"), 'cat': user.category.name if user.category else None
     }
-
     at_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = generate_token(at_payload, settings.JWT_SECRET, settings.JWT_ALGORITHM, at_expires)
 
     rt_payload = {"sub": str_encode(str(user.id)), "t": refresh_key, 'a': access_key}
     refresh_token = generate_token(rt_payload, settings.SECRET_KEY, settings.JWT_ALGORITHM, rt_expires)
     
-    # --- CHANGE: Add user category to the final response object ---
     return {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "expires_in": at_expires.seconds,
-        "user_category": user.category.name if user.category else None # Also include it here
+        "access_token": access_token, "refresh_token": refresh_token,
+        "expires_in": at_expires.seconds, "user_category": user.category.name if user.category else None
     }
-    
-async def email_forgot_password_link(data, background_tasks: BackgroundTasks, session: Session):
+
+# --- CORRECTED SIGNATURE ---
+async def email_forgot_password_link(data: EmailRequest, background_tasks: BackgroundTasks, session: Session):
     user = await load_user(data.email, session)
-    if not user.verified_at:
-        raise HTTPException(status_code=400, detail="Your account is not verified. Please check your email inbox to verify your account.")
+    if user and user.is_active and user.verified_at:
+        await send_password_reset_email(user, background_tasks)
     
-    if not user.is_active:
-        raise HTTPException(status_code=400, detail="Your account has been deactivated. Please contact support.")
-    
-    await send_password_reset_email(user, background_tasks)
-    
-    
-async def reset_user_password(data, session: Session):
+# --- CORRECTED SIGNATURE ---
+async def reset_user_password(data: ResetRequest, session: Session):
     user = await load_user(data.email, session)
-    
     if not user or not user.verified_at or not user.is_active:
         raise HTTPException(status_code=400, detail="Invalid request")
     
     user_token = user.get_context_string(context=FORGOT_PASSWORD)
     try:
         token_valid = verify_password(user_token, data.token)
-    except Exception as verify_exec:
-        logging.exception(verify_exec)
+    except Exception:
         token_valid = False
     if not token_valid:
         raise HTTPException(status_code=400, detail="Invalid window.")
@@ -202,12 +175,9 @@ async def reset_user_password(data, session: Session):
     user.updated_at = datetime.now()
     session.add(user)
     session.commit()
-    session.refresh(user)
-    # You might want to notify the user that their password has been updated.
-    
     
 async def fetch_user_detail(pk: int, session: Session):
     user = session.query(User).filter(User.id == pk).first()
     if user:
         return user
-    raise HTTPException(status_code=404, detail="User does not exist.") # Changed to 404 for not found
+    raise HTTPException(status_code=404, detail="User does not exist.")
